@@ -28,6 +28,7 @@ listings_bp = Blueprint('listings', __name__)
 users_bp = Blueprint('users', __name__)
 alerts_bp = Blueprint('alerts', __name__)
 scraping_bp = Blueprint('scraping', __name__)
+auth_bp = Blueprint('auth', __name__)
 
 
 # Listings Routes
@@ -205,18 +206,49 @@ def get_listings_statistics():
 @listings_bp.route('/trends', methods=['GET'])
 def get_price_trends():
     """
-    Get price trends over time
+    Get price trends over time with ML analysis
     
     Query parameters:
     - location: Filter by location
     - days: Number of days to analyze (default: 30)
+    - include_deals: Include deal analysis (default: true)
     """
     try:
+        from utils.trends import PriceTrendAnalyzer
+        
         location = request.args.get('location')
         days = request.args.get('days', 30, type=int)
+        include_deals = request.args.get('include_deals', 'true').lower() == 'true'
         
-        trends = db_manager.get_price_trends(location=location, days=days)
-        return jsonify({'trends': trends})
+        # Use our new trend analyzer
+        analyzer = PriceTrendAnalyzer(db_manager)
+        
+        if location:
+            # Get trends for specific location
+            trends = analyzer.calculate_price_trends(days)
+            if location in trends:
+                result = {location: trends[location]}
+            else:
+                result = {}
+        else:
+            # Get trends for all locations
+            trends = analyzer.calculate_price_trends(days)
+            result = trends
+        
+        # Flag deals if requested
+        deals_found = 0
+        if include_deals:
+            deals_found = analyzer.flag_deals()
+        
+        # Get summary
+        summary = analyzer.get_trend_summary()
+        
+        return jsonify({
+            'trends': result,
+            'deals_found': deals_found,
+            'summary': summary,
+            'analysis_period_days': days
+        })
         
     except Exception as e:
         logger.error(f"Error getting price trends: {e}")
@@ -485,4 +517,34 @@ def get_scraping_logs():
         
     except Exception as e:
         logger.error(f"Error getting scraping logs: {e}")
-        return jsonify({'error': 'Internal server error'}), 500 
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+# Authentication Routes
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    from utils.auth import register_handler
+    return register_handler()
+
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    """Login user"""
+    from utils.auth import login_handler
+    return login_handler()
+
+
+@auth_bp.route('/profile', methods=['GET'])
+def get_profile():
+    """Get user profile"""
+    from utils.auth import profile_handler
+    return profile_handler()
+
+
+@auth_bp.route('/upgrade', methods=['POST'])
+def upgrade_tier():
+    """Upgrade user tier"""
+    from utils.auth import upgrade_tier_handler
+    return upgrade_tier_handler() 

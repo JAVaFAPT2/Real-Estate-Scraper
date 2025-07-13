@@ -48,6 +48,11 @@ class MigrationManager:
                 'version': 3,
                 'name': 'Add subscription fields',
                 'sql': self._get_subscription_migrations()
+            },
+            {
+                'version': 4,
+                'name': 'Add lat/lng coordinates',
+                'sql': self._get_coordinates_migrations()
             }
         ]
     
@@ -62,6 +67,8 @@ class MigrationManager:
                 price FLOAT NOT NULL,
                 area FLOAT NOT NULL,
                 price_per_m2 FLOAT NOT NULL,
+                lat FLOAT,
+                lng FLOAT,
                 image_url VARCHAR(500),
                 link VARCHAR(500) NOT NULL,
                 property_type VARCHAR(100) NOT NULL,
@@ -134,6 +141,13 @@ class MigrationManager:
         return [
             "ALTER TABLE users ADD COLUMN subscription_tier VARCHAR(20) DEFAULT 'free'",
             "ALTER TABLE users ADD COLUMN subscription_expires DATETIME"
+        ]
+    
+    def _get_coordinates_migrations(self) -> List[str]:
+        """Get SQL for adding lat/lng coordinates"""
+        return [
+            "ALTER TABLE property_listings ADD COLUMN lat FLOAT",
+            "ALTER TABLE property_listings ADD COLUMN lng FLOAT"
         ]
     
     def get_migration_table_sql(self) -> str:

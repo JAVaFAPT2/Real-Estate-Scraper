@@ -24,6 +24,8 @@ class PropertyListing(Base):
     price = Column(Float, nullable=False)
     area = Column(Float, nullable=False)
     price_per_m2 = Column(Float, nullable=False)
+    lat = Column(Float)  # Latitude for map integration
+    lng = Column(Float)  # Longitude for map integration
     image_url = Column(String(500))
     link = Column(String(500), nullable=False)
     property_type = Column(String(100), nullable=False)
@@ -45,6 +47,8 @@ class PropertyListing(Base):
             'price': self.price,
             'area': self.area,
             'price_per_m2': self.price_per_m2,
+            'lat': self.lat,
+            'lng': self.lng,
             'image_url': self.image_url,
             'link': self.link,
             'property_type': self.property_type,
@@ -62,7 +66,9 @@ class User(Base):
     __tablename__ = 'users'
     
     id = Column(Integer, primary_key=True)
+    username = Column(String(100), nullable=False)
     email = Column(String(200), unique=True, nullable=False)
+    password = Column(String(255), nullable=False)  # Hashed password
     name = Column(String(100), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -79,6 +85,7 @@ class User(Base):
         """Convert model to dictionary"""
         return {
             'id': self.id,
+            'username': self.username,
             'email': self.email,
             'name': self.name,
             'is_active': self.is_active,

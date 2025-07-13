@@ -169,7 +169,18 @@ class ScraperManager:
         """Scheduled scraping job"""
         logger.info("Running scheduled scraping job")
         try:
+            # Run scraping
             await self.run_all_scrapers()
+            
+            # Run trend analysis after scraping
+            try:
+                from utils.trends import run_trend_analysis
+                logger.info("Running trend analysis after scraping...")
+                trend_result = run_trend_analysis()
+                logger.info(f"Trend analysis completed: {trend_result.get('deals_found', 0)} deals found")
+            except Exception as trend_error:
+                logger.error(f"Trend analysis failed: {trend_error}")
+            
             self.stats['next_run'] = datetime.now() + timedelta(hours=self.scrape_interval_hours)
         except Exception as e:
             logger.error(f"Scheduled scraping failed: {e}")

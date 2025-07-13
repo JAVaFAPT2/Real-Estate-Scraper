@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Estate Scraper - Vietnam Property Search</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #e74c3c;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --light-bg: #ecf0f1;
+            --dark-text: #2c3e50;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--dark-text);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 4rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .hero-section h1 {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        
+        .hero-section p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .search-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stats-card i {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .listing-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+            transition: transform 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .listing-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        
+        .listing-image {
+            height: 200px;
+            background-size: cover;
+            background-position: center;
+            background-color: #f8f9fa;
+        }
+        
+        .listing-price {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+        
+        .listing-location {
+            color: var(--secondary-color);
+            font-weight: 500;
+        }
+        
+        .filter-section {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .loading i {
+            font-size: 2rem;
+            color: var(--secondary-color);
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .alert-badge {
+            background-color: var(--success-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+        
+        .map-container {
+            height: 400px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+        
+        .export-buttons {
+            margin-bottom: 1rem;
+        }
+        
+        .export-buttons .btn {
+            margin-right: 0.5rem;
+        }
+        
+        .price-range {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .price-range input {
+            flex: 1;
+        }
+        
+        .filters-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .filters-row .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        @media (max-width: 768px) {
+            .hero-section h1 {
+                font-size: 2rem;
+            }
+            
+            .filters-row {
+                flex-direction: column;
+            }
+            
+            .price-range {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--primary-color);">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-home"></i> Real Estate Scraper
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#search">Search</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#alerts">Alerts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#stats">Statistics</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#api">API</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container text-center">
+            <h1>Find Your Perfect Property in Vietnam</h1>
+            <p class="lead">Advanced real estate search with price comparison, market trends, and instant alerts</p>
+            <div class="mt-4">
+                <button class="btn btn-light btn-lg me-3" onclick="scrollToSearch()">
+                    <i class="fas fa-search"></i> Start Searching
+                </button>
+                <button class="btn btn-outline-light btn-lg" onclick="showAlertsModal()">
+                    <i class="fas fa-bell"></i> Set Up Alerts
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <div class="container">
+        <!-- Statistics Cards -->
+        <div class="row mb-4" id="stats">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card">
+                    <i class="fas fa-home text-primary"></i>
+                    <h4 id="total-listings">0</h4>
+                    <p>Total Properties</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card">
+                    <i class="fas fa-chart-line text-success"></i>
+                    <h4 id="avg-price">0</h4>
+                    <p>Avg Price (VND)</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card">
+                    <i class="fas fa-clock text-warning"></i>
+                    <h4 id="recent-listings">0</h4>
+                    <p>New Today</p>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card">
+                    <i class="fas fa-users text-info"></i>
+                    <h4 id="total-users">0</h4>
+                    <p>Active Users</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div id="search">
+            <div class="search-card">
+                <h3 class="mb-4">
+                    <i class="fas fa-search"></i> Property Search
+                </h3>
+                
+                <!-- Filters -->
+                <div class="filter-section">
+                    <div class="filters-row">
+                        <div class="form-group">
+                            <label for="location">Location</label>
+                            <input type="text" class="form-control" id="location" placeholder="e.g., Hanoi, Ho Chi Minh City">
+                        </div>
+                        <div class="form-group">
+                            <label for="property-type">Property Type</label>
+                            <select class="form-control" id="property-type">
+                                <option value="">All Types</option>
+                                <option value="Căn hộ">Apartment</option>
+                                <option value="Nhà riêng">House</option>
+                                <option value="Nhà phố">Townhouse</option>
+                                <option value="Đất nền">Land</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="bedrooms">Bedrooms</label>
+                            <select class="form-control" id="bedrooms">
+                                <option value="">Any</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4+</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="filters-row mt-3">
+                        <div class="form-group">
+                            <label>Price Range (VND)</label>
+                            <div class="price-range">
+                                <input type="number" class="form-control" id="min-price" placeholder="Min Price">
+                                <span>-</span>
+                                <input type="number" class="form-control" id="max-price" placeholder="Max Price">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Area Range (m²)</label>
+                            <div class="price-range">
+                                <input type="number" class="form-control" id="min-area" placeholder="Min Area">
+                                <span>-</span>
+                                <input type="number" class="form-control" id="max-area" placeholder="Max Area">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="source">Source</label>
+                            <select class="form-control" id="source">
+                                <option value="">All Sources</option>
+                                <option value="BatDongSan">BatDongSan</option>
+                                <option value="Chotot">Chotot</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <button class="btn btn-primary" onclick="searchProperties()">
+                            <i class="fas fa-search"></i> Search Properties
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="clearFilters()">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Export Buttons -->
+                <div class="export-buttons">
+                    <button class="btn btn-success" onclick="exportData('csv')">
+                        <i class="fas fa-download"></i> Export CSV
+                    </button>
+                    <button class="btn btn-info" onclick="exportData('excel')">
+                        <i class="fas fa-file-excel"></i> Export Excel
+                    </button>
+                    <button class="btn btn-warning" onclick="showMapView()">
+                        <i class="fas fa-map"></i> Map View
+                    </button>
+                </div>
+
+                <!-- Results -->
+                <div id="results-container">
+                    <div id="loading" class="loading" style="display: none;">
+                        <i class="fas fa-spinner"></i>
+                        <p>Searching properties...</p>
+                    </div>
+                    <div id="results"></div>
+                    <div id="pagination" class="pagination-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map View -->
+        <div id="map-view" style="display: none;">
+            <div class="search-card">
+                <h3 class="mb-4">
+                    <i class="fas fa-map"></i> Map View
+                </h3>
+                <div id="map" class="map-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Modal -->
+    <div class="modal fade" id="alertsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-bell"></i> Set Up Property Alerts
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="alert-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="alert-name" class="form-label">Alert Name</label>
+                                    <input type="text" class="form-control" id="alert-name" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="alert-email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="alert-email" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="alert-location" class="form-label">Location</label>
+                                    <input type="text" class="form-control" id="alert-location">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="alert-property-type" class="form-label">Property Type</label>
+                                    <select class="form-control" id="alert-property-type">
+                                        <option value="">Any Type</option>
+                                        <option value="Căn hộ">Apartment</option>
+                                        <option value="Nhà riêng">House</option>
+                                        <option value="Nhà phố">Townhouse</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="alert-bedrooms" class="form-label">Bedrooms</label>
+                                    <select class="form-control" id="alert-bedrooms">
+                                        <option value="">Any</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                        <option value="4">4+</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Price Range (VND)</label>
+                                    <div class="price-range">
+                                        <input type="number" class="form-control" id="alert-min-price" placeholder="Min">
+                                        <input type="number" class="form-control" id="alert-max-price" placeholder="Max">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="createAlert()">
+                        <i class="fas fa-bell"></i> Create Alert
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Documentation Section -->
+    <section class="mt-5" id="api">
+        <div class="container">
+            <div class="search-card">
+                <h3 class="mb-4">
+                    <i class="fas fa-code"></i> API Documentation
+                </h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Endpoints</h5>
+                        <ul class="list-group">
+                            <li class="list-group-item">
+                                <strong>GET /api/listings</strong> - Search properties
+                            </li>
+                            <li class="list-group-item">
+                                <strong>GET /api/listings/export</strong> - Export data
+                            </li>
+                            <li class="list-group-item">
+                                <strong>POST /api/alerts</strong> - Create alerts
+                            </li>
+                            <li class="list-group-item">
+                                <strong>POST /api/scraping/start</strong> - Start scraping
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Example Usage</h5>
+                        <pre><code>// Search properties
+fetch('/api/listings?location=Hanoi&min_price=1000000000')
+  .then(response => response.json())
+  .then(data => console.log(data));
+
+// Create alert
+fetch('/api/alerts', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    user_email: 'user@example.com',
+    name: 'Hanoi Apartments',
+    location: 'Hanoi'
+  })
+});</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-light mt-5 py-4">
+        <div class="container text-center">
+            <p>&copy; 2024 Real Estate Scraper. Built with ❤️ for Vietnam's property market.</p>
+            <p>
+                <a href="#" class="text-light me-3">Privacy Policy</a>
+                <a href="#" class="text-light me-3">Terms of Service</a>
+                <a href="#" class="text-light">Contact</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html> 

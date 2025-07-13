@@ -1,15 +1,16 @@
 """
 Chotot Scraper
 
-This module implements scraping functionality for chotot.com
+This module implements scraping functionality for chotot.com using their API
 """
 
 import asyncio
 import logging
-from typing import List, Optional, Any
+import requests
+import json
+from typing import List, Optional, Any, Dict
 from datetime import datetime
 from urllib.parse import urljoin
-from playwright.async_api import async_playwright, Page
 
 from .base_scraper import BaseScraper, PropertyListing
 
@@ -18,37 +19,39 @@ logger = logging.getLogger(__name__)
 
 class ChototScraper(BaseScraper):
     """
-    Scraper for chotot.com
+    Scraper for chotot.com using their API
     
-    This scraper handles the specific structure and selectors
-    used by the Chotot website.
+    This scraper uses the internal API endpoint to fetch property listings
+    instead of browser automation for better performance and reliability.
     """
     
     def __init__(self):
         super().__init__(
             name="Chotot",
             base_url="https://chotot.com",
-            delay_range=(2, 4)  # Chotot can handle faster requests
+            delay_range=(1, 2)  # Faster requests since we're using API
         )
         
-        # CSS selectors for Chotot
-        self.selectors = {
-            'listing_container': '.AdItem',
-            'title': '.AdItem__Title',
-            'price': '.AdItem__Price',
-            'area': '.AdItem__Area',
-            'location': '.AdItem__Location',
-            'image': '.AdItem__Image img',
-            'property_type': '.AdItem__Category',
-            'bedrooms': '.AdItem__Bedroom',
-            'bathrooms': '.AdItem__Bathroom',
-            'next_page': '.pagination .next',
-            'listing_link': '.AdItem__Title a',
+        # API endpoint and parameters
+        self.api_url = "https://gateway.chotot.com/v1/public/ad-listing"
+        self.headers = {
+            'User-Agent': 'RealEstateScraper/1.0 (+https://github.com/real-estate-scraper)',
+            'Accept': 'application/json',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
+            'Referer': 'https://chotot.com/',
+            'Origin': 'https://chotot.com'
+        }
+        
+        # Default API parameters
+        self.default_params = {
+            'cg': 1000,  # Real estate category
+            'limit': 20,  # Items per page
+            'page': 1
         }
     
     async def scrape_listings(self, max_pages: int = 10) -> List[PropertyListing]:
         """
-        Scrape property listings from Chotot
+        Scrape property listings from Chotot API
         
         Args:
             max_pages: Maximum number of pages to scrape
@@ -58,134 +61,111 @@ class ChototScraper(BaseScraper):
         """
         listings = []
         
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            
-            # Set user agent
-            await page.set_extra_http_headers({
-                'User-Agent': 'RealEstateScraper/1.0 (+https://github.com/real-estate-scraper)'
-            })
-            
-            try:
-                # Start with the real estate category
-                start_url = f"{self.base_url}/mua-ban-nha-dat"
-                await page.goto(start_url, wait_until='networkidle')
+        try:
+            page_num = 1
+            while page_num <= max_pages:
+                logger.info(f"Scraping page {page_num} from Chotot API")
+                
+                # Prepare API parameters
+                params = self.default_params.copy()
+                params['page'] = page_num
+                
+                # Make API request
+                response = await self._make_api_request(params)
+                
+                if not response or 'ads' not in response:
+                    logger.warning(f"No valid response from API on page {page_num}")
+                    break
+                
+                ads = response.get('ads', [])
+                if not ads:
+                    logger.info(f"No more listings found on page {page_num}")
+                    break
+                
+                # Parse each listing
+                for ad in ads:
+                    try:
+                        listing = self._parse_api_listing(ad)
+                        if listing:
+                            listings.append(listing)
+                    except Exception as e:
+                        logger.error(f"Error parsing listing: {e}")
+                        continue
+                
+                # Check if we should continue to next page
+                total = response.get('total', 0)
+                current_count = page_num * params['limit']
+                
+                if current_count >= total or page_num >= max_pages:
+                    break
+                
+                page_num += 1
                 await self.respectful_delay()
                 
-                page_num = 1
-                while page_num <= max_pages:
-                    logger.info(f"Scraping page {page_num} from Chotot")
-                    
-                    # Wait for listings to load
-                    try:
-                        await page.wait_for_selector(self.selectors['listing_container'], timeout=10000)
-                    except:
-                        logger.warning(f"No listings found on page {page_num}")
-                        break
-                    
-                    # Get all listing elements
-                    listing_elements = await page.query_selector_all(self.selectors['listing_container'])
-                    
-                    if not listing_elements:
-                        logger.warning(f"No listing elements found on page {page_num}")
-                        break
-                    
-                    # Parse each listing
-                    for element in listing_elements:
-                        try:
-                            listing = await self.parse_listing_async(page, element)
-                            if listing:
-                                listings.append(listing)
-                        except Exception as e:
-                            logger.error(f"Error parsing listing: {e}")
-                            continue
-                    
-                    # Check if there's a next page
-                    next_button = await page.query_selector(self.selectors['next_page'])
-                    if not next_button or page_num >= max_pages:
-                        break
-                    
-                    # Go to next page
-                    await next_button.click()
-                    await page.wait_for_load_state('networkidle')
-                    await self.respectful_delay()
-                    page_num += 1
-                    
-            except Exception as e:
-                logger.error(f"Error during Chotot scraping: {e}")
-                
-            finally:
-                await browser.close()
+        except Exception as e:
+            logger.error(f"Error during Chotot API scraping: {e}")
         
         return listings
     
-    async def parse_listing_async(self, page: Page, element: Any) -> Optional[PropertyListing]:
+    async def _make_api_request(self, params: Dict[str, Any]) -> Optional[Dict]:
         """
-        Parse a listing element asynchronously
+        Make API request to Chotot
         
         Args:
-            page: Playwright page object
-            element: Listing element
+            params: Query parameters for the API
+            
+        Returns:
+            Optional[Dict]: API response or None if failed
+        """
+        try:
+            # Use asyncio to run the synchronous requests in a thread pool
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: requests.get(
+                    self.api_url, 
+                    params=params, 
+                    headers=self.headers, 
+                    timeout=30
+                )
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"API request failed with status {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error making API request: {e}")
+            return None
+    
+    def _parse_api_listing(self, ad: Dict[str, Any]) -> Optional[PropertyListing]:
+        """
+        Parse a listing from the API response
+        
+        Args:
+            ad: Raw ad data from API
             
         Returns:
             Optional[PropertyListing]: Parsed listing or None
         """
         try:
-            # Extract title and link
-            title_element = await element.query_selector(self.selectors['title'])
-            title = await title_element.text_content() if title_element else "No title"
+            # Extract basic information
+            title = ad.get('subject', 'No title')
+            price = ad.get('price', 0)
+            area = ad.get('size', 0)  # size field contains area in m²
+            location = self._extract_location(ad)
+            image_url = ad.get('image')
+            property_type = ad.get('category_name', 'Unknown')
             
-            link_element = await element.query_selector(self.selectors['listing_link'])
-            link = await link_element.get_attribute('href') if link_element else ""
-            if link and not link.startswith('http'):
-                link = urljoin(self.base_url, link)
+            # Extract bedrooms and bathrooms
+            bedrooms = ad.get('rooms')
+            bathrooms = ad.get('toilets')
             
-            # Extract price
-            price_element = await element.query_selector(self.selectors['price'])
-            price_text = await price_element.text_content() if price_element else "0"
-            price = self.clean_price(price_text)
-            
-            # Extract area
-            area_element = await element.query_selector(self.selectors['area'])
-            area_text = await area_element.text_content() if area_element else "0"
-            area = self.clean_area(area_text)
-            
-            # Extract location
-            location_element = await element.query_selector(self.selectors['location'])
-            location = await location_element.text_content() if location_element else "Unknown"
-            
-            # Extract image
-            image_element = await element.query_selector(self.selectors['image'])
-            image_url = await image_element.get_attribute('src') if image_element else None
-            if image_url and not image_url.startswith('http'):
-                image_url = urljoin(self.base_url, image_url)
-            
-            # Extract property type
-            type_element = await element.query_selector(self.selectors['property_type'])
-            property_type = await type_element.text_content() if type_element else "Unknown"
-            
-            # Extract bedrooms (if available)
-            bedroom_element = await element.query_selector(self.selectors['bedrooms'])
-            bedrooms = None
-            if bedroom_element:
-                bedroom_text = await bedroom_element.text_content()
-                if bedroom_text:
-                    import re
-                    numbers = re.findall(r'\d+', bedroom_text)
-                    if numbers:
-                        bedrooms = int(numbers[0])
-            
-            # Extract bathrooms (if available)
-            bathroom_element = await element.query_selector(self.selectors['bathrooms'])
-            bathrooms = None
-            if bathroom_element:
-                bathroom_text = await bathroom_element.text_content()
-                if bathroom_text:
-                    import re
-                    numbers = re.findall(r'\d+', bathroom_text)
-                    if numbers:
-                        bathrooms = int(numbers[0])
+            # Create listing URL
+            ad_id = ad.get('ad_id')
+            link = f"{self.base_url}/mua-ban-nha-dat/{ad_id}" if ad_id else ""
             
             # Calculate price per m²
             price_per_m2 = self.calculate_price_per_m2(price, area)
@@ -205,30 +185,93 @@ class ChototScraper(BaseScraper):
                 timestamp=datetime.now(),
                 source=self.name,
                 raw_data={
-                    'price_text': price_text,
-                    'area_text': area_text,
-                    'property_type': property_type,
+                    'ad_id': ad_id,
+                    'category': ad.get('category'),
+                    'region_v2': ad.get('region_v2'),
+                    'area_v2': ad.get('area_v2'),
+                    'price_string': ad.get('price_string'),
+                    'date': ad.get('date'),
+                    'account_name': ad.get('account_name'),
+                    'full_name': ad.get('full_name'),
+                    'street_name': ad.get('street_name'),
+                    'ward_name': ad.get('ward_name'),
+                    'area_name': ad.get('area_name'),
+                    'region_name': ad.get('region_name'),
+                    'latitude': ad.get('latitude'),
+                    'longitude': ad.get('longitude'),
+                    'property_legal_document': ad.get('property_legal_document'),
+                    'furnishing_sell': ad.get('furnishing_sell'),
+                    'furnishing_rent': ad.get('furnishing_rent'),
+                    'house_type': ad.get('house_type'),
+                    'apartment_type': ad.get('apartment_type'),
+                    'floors': ad.get('floors'),
+                    'width': ad.get('width'),
+                    'length': ad.get('length'),
+                    'living_size': ad.get('living_size'),
+                    'deposit': ad.get('deposit'),
+                    'price_million_per_m2': ad.get('price_million_per_m2'),
+                    'has_video': ad.get('has_video'),
+                    'number_of_images': ad.get('number_of_images'),
+                    'images': ad.get('images', []),
+                    'videos': ad.get('videos', []),
+                    'seller_info': ad.get('seller_info', {}),
                 }
             )
             
             return listing
             
         except Exception as e:
-            logger.error(f"Error parsing Chotot listing: {e}")
+            logger.error(f"Error parsing Chotot API listing: {e}")
             return None
+    
+    def _extract_location(self, ad: Dict[str, Any]) -> str:
+        """
+        Extract location information from ad data
+        
+        Args:
+            ad: Raw ad data from API
+            
+        Returns:
+            str: Formatted location string
+        """
+        location_parts = []
+        
+        # Add street name if available
+        street_name = ad.get('street_name')
+        if street_name:
+            location_parts.append(street_name)
+        
+        # Add ward name if available
+        ward_name = ad.get('ward_name')
+        if ward_name:
+            location_parts.append(ward_name)
+        
+        # Add area name if available
+        area_name = ad.get('area_name')
+        if area_name:
+            location_parts.append(area_name)
+        
+        # Add region name if available
+        region_name = ad.get('region_name')
+        if region_name:
+            location_parts.append(region_name)
+        
+        if location_parts:
+            return ', '.join(location_parts)
+        else:
+            return "Unknown"
     
     def parse_listing(self, listing_element: Any) -> Optional[PropertyListing]:
         """
-        Parse a single listing element (synchronous version for compatibility)
+        Parse a single listing element (kept for compatibility)
         
         Args:
-            listing_element: Raw listing element from the page
+            listing_element: Raw listing element (not used in API version)
             
         Returns:
             Optional[PropertyListing]: Parsed listing or None if parsing fails
         """
-        # This method is kept for compatibility but the async version is preferred
-        logger.warning("Using synchronous parse_listing - use parse_listing_async instead")
+        logger.warning("parse_listing method is deprecated - use API methods instead")
         return None
 
 

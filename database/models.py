@@ -40,6 +40,13 @@ class PropertyListing(Base):
     
     def to_dict(self):
         """Convert model to dictionary"""
+        raw_data_dict = {}
+        if self.raw_data:
+            try:
+                raw_data_dict = json.loads(self.raw_data)
+            except (json.JSONDecodeError, TypeError):
+                raw_data_dict = {'raw_data': self.raw_data}
+        
         return {
             'id': self.id,
             'title': self.title,
@@ -56,7 +63,7 @@ class PropertyListing(Base):
             'bathrooms': self.bathrooms,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'source': self.source,
-            'raw_data': json.loads(self.raw_data) if self.raw_data else {}
+            'raw_data': raw_data_dict
         }
 
 

@@ -20,7 +20,7 @@ SQLAlchemy==2.0.23
 APScheduler==3.10.4
 
 # Email
-smtplib2==0.2.1
+# smtplib is part of Python standard library, no need for external package
 
 # Environment and configuration
 python-dotenv==1.0.0

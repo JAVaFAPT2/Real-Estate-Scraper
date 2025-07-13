@@ -16,6 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Load environment variables
 load_dotenv()
 
+# Create logs directory if it doesn't exist
+import os
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,

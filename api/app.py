@@ -10,7 +10,7 @@ from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from .routes import listings_bp, users_bp, alerts_bp, scraping_bp
+from .routes import listings_bp, users_bp, alerts_bp, scraping_bp, auth_bp
 
 # Load environment variables
 load_dotenv()
@@ -42,6 +42,7 @@ def create_app(config_name: str = None) -> Flask:
     app.register_blueprint(users_bp, url_prefix='/api/users')
     app.register_blueprint(alerts_bp, url_prefix='/api/alerts')
     app.register_blueprint(scraping_bp, url_prefix='/api/scraping')
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
     
     # Register error handlers
     register_error_handlers(app)
